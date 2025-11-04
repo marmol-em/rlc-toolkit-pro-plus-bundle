@@ -33,6 +33,50 @@ TEMP_CONST = {"Copper": 234.5, "Aluminum": 228.1}
 # ----------------------------- #
 st.set_page_config(page_title="R-L-C Toolkit (Pro+ Bundle)", page_icon="⚡", layout="wide")
 
+# ==== Global Unit System ====
+st.sidebar.header("🌍 Units")
+unit_system = st.sidebar.selectbox(
+    "Unit system",
+    ["SI (m, mm, km)", "US (ft, inch, mile, kcmil)"],
+    index=0,
+    key="units_system"
+)
+show_dual = st.sidebar.checkbox("Show dual units in results (SI + US)", value=True, key="units_dual")
+
+# Conversions
+INCH_TO_M    = 0.0254
+FT_TO_M      = 0.3048
+MILE_TO_M    = 1609.344
+KCMIL_TO_MM2 = 0.5067075  # 1 kcmil = 0.5067075 mm²
+MM2_TO_M2    = 1e-6
+
+def to_si_radius(val, unit_system):
+    # radius: SI=mm, US=inch
+    return (val/1000.0) if unit_system.startswith("SI") else (val * INCH_TO_M)
+
+def to_si_spacing(val, unit_system):
+    # spacing/height/coordinates: SI=m, US=ft
+    return val if unit_system.startswith("SI") else (val * FT_TO_M)
+
+def to_si_length(val, unit_system):
+    # line length: SI=km, US=mile
+    return (val*1000.0) if unit_system.startswith("SI") else (val * MILE_TO_M)
+
+def to_si_area(val, unit_system):
+    # metallic area: SI=mm², US=kcmil
+    if unit_system.startswith("SI"):
+        return val * MM2_TO_M2
+    mm2 = val * KCMIL_TO_MM2
+    return mm2 * MM2_TO_M2
+
+def to_si_rho(val, rho_unit):  # resistivity: Ω·m or Ω·ft
+    return val if rho_unit == "Ω·m" else (val * FT_TO_M)
+
+def fmt_dual(si_value, si_label, us_value=None, us_label=None):
+    if show_dual and us_value is not None:
+        return f"{si_value} {si_label}  |  {us_value} {us_label}"
+    return f"{si_value} {si_label}"
+
 st.markdown(
     """
 <style>
@@ -157,19 +201,27 @@ with tabR:
     c1, c2 = st.columns([1.1, 1])
     with c1:
         material = st.selectbox("Conductor material", ["Copper", "Aluminum"])
-        rho1 = st.number_input("ρ₁ at T₁ (Ω·m)", value=1.724e-8 if material == "Copper" else 2.826e-8, format="%.6e")
-        area_mm2 = st.number_input("Metallic area (mm²)", value=300.0, min_value=0.1)
-        length_km_R = st.number_input("Line length (km)", value=10.0, min_value=0.001, key="res_len")
+# dynamic labels
+AREA_LABEL   = "Metallic area (mm²)" if unit_system.startswith("SI") else "Metallic area (kcmil)"
+LENGTH_LABEL_R = "Line length (km)" if unit_system.startswith("SI") else "Line length (mile)"
+RHO_UNIT_OPTS = ["Ω·m", "Ω·ft"]
+
+rho1 = st.number_input("ρ₁ at T₁ (value)", value=1.724e-8 if material == "Copper" else 2.826e-8, format="%.6e")
+rho_unit = st.selectbox("Resistivity unit", RHO_UNIT_OPTS, index=0, key="res_rho_unit")
+area_in = st.number_input(AREA_LABEL, value=300.0, min_value=0.1)
+length_in_R = st.number_input(LENGTH_LABEL_R, value=10.0, min_value=0.001, key="res_len")
     with c2:
         T1 = st.number_input("Reference temperature T₁ (°C)", value=20.0)
         T2 = st.number_input("Operating temperature T₂ (°C)", value=50.0)
         st.caption(f"Temperature constant θ = **{TEMP_CONST[material]} °C** for {material}")
 
-    area_m2 = area_mm2 * 1e-6
-    rho2 = rho_corrected_constantC(rho1, T1, T2, TEMP_CONST[material])
+    area_m2 = to_si_area(area_in, unit_system)
+    rho1_SI = to_si_rho(rho1, rho_unit)
+rho2 = rho_corrected_constantC(rho1_SI, T1, T2, TEMP_CONST[material])
 
     R_per_km = rho2 / area_m2 * 1000.0
-    R_total = R_per_km * length_km_R
+    length_m_R = to_si_length(length_in_R, unit_system)
+R_total = (rho2 / area_m2) * length_m_R
 
     st.markdown("#### Results")
     a, b, c = st.columns(3)
@@ -194,21 +246,25 @@ with tabL:
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        radius_mm = st.number_input("Conductor radius (mm)", value=10.0, min_value=0.1, key="ind_radius")
-        r_m = radius_mm / 1000.0
+        RADIUS_LABEL   = "Conductor radius (mm)" if unit_system.startswith("SI") else "Conductor radius (inch)"
+radius_in = st.number_input(RADIUS_LABEL, value=10.0, min_value=0.1, key="ind_radius")
+r_m = to_si_radius(radius_in, unit_system)
     with c2:
         user_gmr = st.number_input("GMR (m) — 0 = auto (0.7788·r)", value=0.0, min_value=0.0, format="%.6f", key="ind_gmr")
         gmr_single = gmr_from_radius(r_m, user_gmr)
     with c3:
-        length_km_L = st.number_input("Line length (km)", value=10.0, min_value=0.001, key="ind_len")
+        LENGTH_LABEL_L = "Line length (km)" if unit_system.startswith("SI") else "Line length (mile)"
+length_in_L = st.number_input(LENGTH_LABEL_L, value=10.0, min_value=0.001, key="ind_len")
         freq = st.number_input("Frequency (Hz) for Xₗ", value=60.0, min_value=1.0, key="ind_freq")
 
     # Bundled switch
     bundle_mode = st.toggle("Enable Bundled Conductors (per phase)", key="ind_bundle")
     if bundle_mode:
         bundle_n = st.number_input("Number of subconductors (n)", min_value=2, max_value=6, value=4, step=1, key="ind_n")
-        bundle_spacing_m = st.number_input("Spacing between subconductors d_b (m)", min_value=0.05, value=0.4, step=0.05, key="ind_db")
-        GMR_used = bundle_eq_gmr(gmr_single, bundle_n, bundle_spacing_m)
+        DB_LABEL = "Spacing between subconductors d_b (m)" if unit_system.startswith("SI") else "Spacing between subconductors d_b (ft)"
+bundle_spacing_in = st.number_input(DB_LABEL, min_value=0.05, value=0.4, step=0.05, key="ind_db")
+db_m = to_si_spacing(bundle_spacing_in, unit_system)
+GMR_used = bundle_eq_gmr(gmr_single, bundle_n, db_m)
         st.caption("Using **GMR_eq** for bundle: GMR_eq = (GMR_single × d_b^(n−1))^(1/n)")
     else:
         bundle_n = 1
@@ -217,8 +273,10 @@ with tabL:
 
     # Geometry
     if sys_type_L.startswith("Single"):
-        d = st.number_input("Spacing d (m) between the two conductors", value=2.0, min_value=0.01, key="ind_d")
-        GMD = gmd_single(d)
+        SPACING_LABEL  = "Spacing d (m) between the two conductors" if unit_system.startswith("SI") else "Spacing d (ft) between the two conductors"
+d_in = st.number_input(SPACING_LABEL, value=2.0, min_value=0.01, key="ind_d")
+d_m = to_si_spacing(d_in, unit_system)
+GMD = gmd_single(d_m)
         Dab = Dbc = Dca = None
         y_for_plot = 10.0  # for a simple sketch
     else:
@@ -233,13 +291,18 @@ with tabL:
         with cC:
             xC = st.number_input("xC", value=16.0, format="%.3f", key="ind_xC")
             yC = st.number_input("yC", value=20.0, min_value=0.1, format="%.3f", key="ind_yC")
-        GMD, Dab, Dbc, Dca = gmd_three(xA, yA, xB, yB, xC, yC)
+        # convert coords to SI if US
+xA, yA = to_si_spacing(xA, unit_system), to_si_spacing(yA, unit_system)
+xB, yB = to_si_spacing(xB, unit_system), to_si_spacing(yB, unit_system)
+xC, yC = to_si_spacing(xC, unit_system), to_si_spacing(yC, unit_system)
+GMD, Dab, Dbc, Dca = gmd_three(xA, yA, xB, yB, xC, yC)
         st.caption(f"Phase spacings: Dab={Dab:.3f} m • Dbc={Dbc:.3f} m • Dca={Dca:.3f} m")
 
     # Calculations
     L_per_m = L_per_m_from_GMD_GMR(GMD, GMR_used)
     L_per_km = L_per_m * 1000.0
-    L_total = L_per_m * (length_km_L * 1000.0)
+    length_m_L = to_si_length(length_in_L, unit_system)
+L_total = L_per_m * length_m_L
     X_L = 2 * math.pi * freq * L_per_km  # Ω/km
 
     # Cards
@@ -338,20 +401,26 @@ with tabC:
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        radius_mm_c = st.number_input("Conductor radius (mm)", value=10.0, min_value=0.1, key="cap_rmm")
-        r_m_c = radius_mm_c / 1000.0
+        RADIUS_LABEL_C = "Conductor radius (mm)" if unit_system.startswith("SI") else "Conductor radius (inch)"
+radius_in_c = st.number_input(RADIUS_LABEL_C, value=10.0, min_value=0.1, key="cap_rmm")
+r_m_c = to_si_radius(radius_in_c, unit_system)
     with c2:
-        height_m = st.number_input("Average conductor height above ground (m)", value=12.0, min_value=0.0)
+        HEIGHT_LABEL = "Average conductor height above ground (m)" if unit_system.startswith("SI") else "Average conductor height above ground (ft)"
+height_in = st.number_input(HEIGHT_LABEL, value=12.0, min_value=0.0)
+height_m = to_si_spacing(height_in, unit_system)
     with c3:
-        length_km_C = st.number_input("Line length (km)", value=10.0, min_value=0.001, key="cap_len")
+        LENGTH_LABEL_C = "Line length (km)" if unit_system.startswith("SI") else "Line length (mile)"
+length_in_C = st.number_input(LENGTH_LABEL_C, value=10.0, min_value=0.001, key="cap_len")
         freq_c = st.number_input("Frequency (Hz) for B_C", value=60.0, min_value=1.0, key="cap_f")
 
     # Bundled switch for capacitance (affects equivalent radius)
     bundle_mode_c = st.toggle("Enable Bundled Conductors (per phase)", key="cap_bundle")
     if bundle_mode_c:
         bundle_n_c = st.number_input("Number of subconductors (n)", min_value=2, max_value=6, value=4, step=1, key="cap_n")
-        bundle_spacing_m_c = st.number_input("Spacing between subconductors d_b (m)", min_value=0.05, value=0.4, step=0.05, key="cap_db")
-        r_used = bundle_eq_radius(r_m_c, bundle_n_c, bundle_spacing_m_c)
+        DB_LABEL_C = "Spacing between subconductors d_b (m)" if unit_system.startswith("SI") else "Spacing between subconductors d_b (ft)"
+bundle_spacing_in_c = st.number_input(DB_LABEL_C, min_value=0.05, value=0.4, step=0.05, key="cap_db")
+db_m_c = to_si_spacing(bundle_spacing_in_c, unit_system)
+r_used = bundle_eq_radius(r_m_c, bundle_n_c, db_m_c)
         st.caption("Using **r_eq** for bundle: r_eq = (r × d_b^(n−1))^(1/n)")
     else:
         bundle_n_c = 1
@@ -359,12 +428,14 @@ with tabC:
         r_used = r_m_c
 
     # Geometry and calculation
-    length_m_C = length_km_C * 1000.0
+    length_m_C = to_si_length(length_in_C, unit_system)
 
     if sys_type_C.startswith("Single"):
-        dC = st.number_input("Spacing d (m)", value=2.5, min_value=0.01, key="cap_d")
-        GMD_eff = dC
-        C_per_m = C_per_m_single(dC, r_used, height_m)
+        SPACING_LABEL_C = "Spacing d (m)" if unit_system.startswith("SI") else "Spacing d (ft)"
+dC_in = st.number_input(SPACING_LABEL_C, value=2.5, min_value=0.01, key="cap_d")
+dC_m = to_si_spacing(dC_in, unit_system)
+GMD_eff = dC_m
+C_per_m = C_per_m_single(dC_m, r_used, height_m)
     else:
         st.markdown("**Phase coordinates (m):**")
         cA, cB, cC = st.columns(3)
@@ -378,8 +449,12 @@ with tabC:
             xC = st.number_input("xC", value=16.0, format="%.3f", key="cap_xC")
             yC = st.number_input("yC", value=20.0, min_value=0.1, format="%.3f", key="cap_yC")
 
-        GMD_eff, Dab_c, Dbc_c, Dca_c = gmd_three(xA, yA, xB, yB, xC, yC)
-        C_per_m = C_per_m_three(GMD_eff, r_used, yA, yB, yC)
+        # convert to SI if US
+xA, yA = to_si_spacing(xA, unit_system), to_si_spacing(yA, unit_system)
+xB, yB = to_si_spacing(xB, unit_system), to_si_spacing(yB, unit_system)
+xC, yC = to_si_spacing(xC, unit_system), to_si_spacing(yC, unit_system)
+GMD_eff, Dab_c, Dbc_c, Dca_c = gmd_three(xA, yA, xB, yB, xC, yC)
+C_per_m = C_per_m_three(GMD_eff, r_used, yA, yB, yC)
         st.caption(f"Phase spacings: Dab={Dab_c:.3f} m • Dbc={Dbc_c:.3f} m • Dca={Dca_c:.3f} m")
 
     C_per_km = C_per_m * 1000.0
@@ -498,3 +573,4 @@ with tabS:
         'Briefly discuss sensitivities shown in the plots, and explain the bundling impact (L↓, C↑).</div>',
         unsafe_allow_html=True,
     )
+
