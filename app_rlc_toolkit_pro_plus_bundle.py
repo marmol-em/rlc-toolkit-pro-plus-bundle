@@ -159,7 +159,7 @@ with tabR:
         material = st.selectbox("Conductor material", ["Copper", "Aluminum"])
         rho1 = st.number_input("ρ₁ at T₁ (Ω·m)", value=1.724e-8 if material == "Copper" else 2.826e-8, format="%.6e")
         area_mm2 = st.number_input("Metallic area (mm²)", value=300.0, min_value=0.1)
-        length_km_R = st.number_input("Line length (km)", value=10.0, min_value=0.001)
+        length_km_R = st.number_input("Line length (km)", value=10.0, min_value=0.001, key="res_len")
     with c2:
         T1 = st.number_input("Reference temperature T₁ (°C)", value=20.0)
         T2 = st.number_input("Operating temperature T₂ (°C)", value=50.0)
@@ -194,20 +194,20 @@ with tabL:
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        radius_mm = st.number_input("Conductor radius (mm)", value=10.0, min_value=0.1)
+        radius_mm = st.number_input("Conductor radius (mm)", value=10.0, min_value=0.1, key="ind_radius")
         r_m = radius_mm / 1000.0
     with c2:
-        user_gmr = st.number_input("GMR (m) — 0 = auto (0.7788·r)", value=0.0, min_value=0.0, format="%.6f")
+        user_gmr = st.number_input("GMR (m) — 0 = auto (0.7788·r)", value=0.0, min_value=0.0, format="%.6f", key="ind_gmr")
         gmr_single = gmr_from_radius(r_m, user_gmr)
     with c3:
-        length_km_L = st.number_input("Line length (km)", value=10.0, min_value=0.001)
-        freq = st.number_input("Frequency (Hz) for Xₗ", value=60.0, min_value=1.0)
+        length_km_L = st.number_input("Line length (km)", value=10.0, min_value=0.001, key="ind_len")
+        freq = st.number_input("Frequency (Hz) for Xₗ", value=60.0, min_value=1.0, key="ind_freq")
 
     # Bundled switch
-    bundle_mode = st.toggle("Enable Bundled Conductors (per phase)")
+    bundle_mode = st.toggle("Enable Bundled Conductors (per phase)", key="ind_bundle")
     if bundle_mode:
-        bundle_n = st.number_input("Number of subconductors (n)", min_value=2, max_value=6, value=4, step=1)
-        bundle_spacing_m = st.number_input("Spacing between subconductors d_b (m)", min_value=0.05, value=0.4, step=0.05)
+        bundle_n = st.number_input("Number of subconductors (n)", min_value=2, max_value=6, value=4, step=1, key="ind_n")
+        bundle_spacing_m = st.number_input("Spacing between subconductors d_b (m)", min_value=0.05, value=0.4, step=0.05, key="ind_db")
         GMR_used = bundle_eq_gmr(gmr_single, bundle_n, bundle_spacing_m)
         st.caption("Using **GMR_eq** for bundle: GMR_eq = (GMR_single × d_b^(n−1))^(1/n)")
     else:
@@ -217,7 +217,7 @@ with tabL:
 
     # Geometry
     if sys_type_L.startswith("Single"):
-        d = st.number_input("Spacing d (m) between the two conductors", value=2.0, min_value=0.01)
+        d = st.number_input("Spacing d (m) between the two conductors", value=2.0, min_value=0.01, key="ind_d")
         GMD = gmd_single(d)
         Dab = Dbc = Dca = None
         y_for_plot = 10.0  # for a simple sketch
@@ -225,14 +225,14 @@ with tabL:
         st.markdown("**Phase coordinates (m):**")
         cA, cB, cC = st.columns(3)
         with cA:
-            xA = st.number_input("xA", value=0.0, format="%.3f")
-            yA = st.number_input("yA", value=20.0, min_value=0.1, format="%.3f")
+            xA = st.number_input("xA", value=0.0, format="%.3f", key="ind_xA")
+            yA = st.number_input("yA", value=20.0, min_value=0.1, format="%.3f", key="ind_yA")
         with cB:
-            xB = st.number_input("xB", value=8.0, format="%.3f")
-            yB = st.number_input("yB", value=20.0, min_value=0.1, format="%.3f")
+            xB = st.number_input("xB", value=8.0, format="%.3f", key="ind_xB")
+            yB = st.number_input("yB", value=20.0, min_value=0.1, format="%.3f", key="ind_yB")
         with cC:
-            xC = st.number_input("xC", value=16.0, format="%.3f")
-            yC = st.number_input("yC", value=20.0, min_value=0.1, format="%.3f")
+            xC = st.number_input("xC", value=16.0, format="%.3f", key="ind_xC")
+            yC = st.number_input("yC", value=20.0, min_value=0.1, format="%.3f", key="ind_yC")
         GMD, Dab, Dbc, Dca = gmd_three(xA, yA, xB, yB, xC, yC)
         st.caption(f"Phase spacings: Dab={Dab:.3f} m • Dbc={Dbc:.3f} m • Dca={Dca:.3f} m")
 
